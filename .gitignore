@@ -9,7 +9,17 @@ __pycache__/
 # 환경 변수 파일 (보안상 필요)
 .env
 
+.claude
+
+# 쿠키 및 세션 데이터 (개인정보 보호)
+storage/
+*.db
+*.json
+
 # 배포/빌드 관련
 dist/
 build/
 *.egg-info/
+
+# Playwright 브라우저 캐시
+.playwright/
