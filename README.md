@@ -139,6 +139,61 @@ curl -X GET "http://localhost:8000/courses/202118039" \
 curl -X DELETE "http://localhost:8000/auth/logout/202012345"
 ```
 
+## MCP 서버 (Claude와 통합)
+
+MCP(Model Context Protocol) 서버를 통해 **Claude가 직접 LMS를 크롤링**할 수 있습니다.
+
+### MCP 서버 실행
+
+```bash
+# FastAPI 서버와 별개로 실행
+uv run python mcp_server.py
+```
+
+### 사용 가능한 MCP 도구
+
+Claude가 사용할 수 있는 도구들:
+
+1. **login_to_lms** - LMS 로그인 시작
+   ```python
+   login_to_lms(username="202118039", password="your_password")
+   ```
+
+2. **submit_otp** - OTP 제출
+   ```python
+   submit_otp(session_id="...", otp="123456")
+   ```
+
+3. **get_lms_courses** - 강의 목록 조회
+   ```python
+   get_lms_courses(username="202118039")
+   ```
+
+4. **logout_from_lms** - 로그아웃
+   ```python
+   logout_from_lms(username="202118039")
+   ```
+
+5. **check_login_status** - 로그인 상태 확인
+   ```python
+   check_login_status(username="202118039")
+   ```
+
+### 사용 예시
+
+**사용자 → Claude:**
+> "내 전북대 강의 목록 보여줘. 학번은 202118039이야."
+
+**Claude의 자동 동작:**
+1. `check_login_status(username="202118039")` - 로그인 상태 확인
+2. 로그인이 안되어 있으면 비밀번호 요청
+3. `login_to_lms(username="202118039", password="***")` - 로그인 시작
+4. 사용자에게 OTP 요청
+5. `submit_otp(session_id="...", otp="123456")` - OTP 제출
+6. `get_lms_courses(username="202118039")` - 강의 목록 조회
+7. 결과를 보기 좋게 정리해서 보여줌
+
+
 ## 프로젝트 구조
 
 ```
@@ -153,13 +208,15 @@ Crawling/
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── browser.py       # Playwright 브라우저 관리
+│   │   ├── config.py        # 설정 및 상수
 │   │   └── session.py       # 세션 및 쿠키 관리
 │   └── models/
 │       ├── __init__.py
 │       └── schemas.py       # Pydantic 데이터 모델
 ├── storage/
 │   └── cookies/             # 쿠키 저장 폴더 (자동 생성)
-├── main.py                  # 실행 진입점
+├── main.py                  # FastAPI 서버 실행
+├── mcp_server.py            # MCP 서버 (Claude 통합)
 ├── requirements.txt         # Python 패키지 목록
 ├── pyproject.toml
 ├── .gitignore
@@ -201,20 +258,9 @@ Crawling/
 - [x] 강의 목록 크롤링 (제목, 교수명, 학기 정보)
 - [x] FastAPI REST API 구현
 - [x] Swagger UI 문서 자동 생성
+- [x] MCP 서버 구현 (Claude 통합)
+- [x] 코드 구조 개선 (설정 분리, 함수 분리)
 
-## 향후 개선사항
-
-- [ ] JWT 토큰 인증 구현 (현재는 간단한 토큰 사용)
-- [ ] 과제 목록 크롤링
-- [ ] 공지사항 크롤링
-- [ ] 강의자료 다운로드
-- [ ] 출석 정보 조회
-- [ ] 성적 조회
-- [ ] MCP 서버 구현 (Claude 통합)
-- [ ] 쿠키 암호화 저장
-- [ ] Redis 세션 관리
-- [ ] 타임아웃 최적화
-- [ ] 에러 핸들링 개선
 
 ## 테스트 결과
 
@@ -236,11 +282,6 @@ Crawling/
 - ✅ 6개 강의 정상 크롤링
 - ✅ 강의명, 교수명 정확히 추출
 - 소요 시간: 약 5-8초
-
-**크롤링된 데이터 품질:**
-- 강의명: 정확 (분반 정보 포함)
-- 교수명: 정확
-- 학기 정보: 정확
 
 ## 주의사항
 

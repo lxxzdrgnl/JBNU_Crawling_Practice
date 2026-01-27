@@ -1,6 +1,9 @@
 fastapi==0.128.0
+fastmcp==2.14.4
+openapi-pydantic==0.5.1
 playwright==1.57.0
 pydantic==2.12.5
 pydantic-core==2.41.5
+pydantic-settings==2.12.0
 python-multipart==0.0.22
 uvicorn==0.40.0
