@@ -11,10 +11,7 @@ __pycache__/
 
 .claude
 
-# 쿠키 및 세션 데이터 (개인정보 보호)
-storage/
 *.db
-*.json
 
 # 배포/빌드 관련
 dist/

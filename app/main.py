@@ -1,65 +1,94 @@
+"""
+JBNU 공지사항 크롤러 - FastAPI 앱
+
+REST API와 MCP 서버에서 사용되는 메인 애플리케이션
+"""
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer
 from contextlib import asynccontextmanager
-from app.api import auth, crawler
-from app.core.browser import browser_manager
 
-# HTTPBearer 보안 스키마 정의
-security = HTTPBearer()
+from app.api import notices
+from app.core.database import Database, init_boards
+from app.config import settings
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    앱 시작/종료 시 실행되는 이벤트
-    """
-    # 시작 시
-    print("🚀 FastAPI 서버 시작")
-    await browser_manager.initialize()
+    """앱 시작/종료 시 실행되는 이벤트"""
+    # ===== 시작 =====
+    print("=" * 50)
+    print("🚀 JBNU 공지사항 크롤러 API 시작")
+    print("=" * 50)
+
+    # MongoDB 연결
+    await Database.connect(
+        uri=settings.MONGODB_URI,
+        db_name=settings.MONGODB_DB_NAME
+    )
+
+    # 인덱스 생성 (없으면)
+    await Database.create_indexes()
+
+    # 초기 게시판 데이터 (없으면)
+    await init_boards()
+
+    print(f"📍 API 문서: http://{settings.API_HOST}:{settings.API_PORT}/docs")
+    print("=" * 50)
 
     yield
 
-    # 종료 시
-    print("🛑 FastAPI 서버 종료")
-    await browser_manager.close()
+    # ===== 종료 =====
+    print("🛑 서버 종료 중...")
+    await Database.disconnect()
 
 
 # FastAPI 앱 생성
 app = FastAPI(
-    title="JBNU LMS Crawler API",
-    description="전북대 스마트학습관리시스템 크롤링 API",
-    version="1.0.0",
+    title="JBNU 공지사항 크롤러 API",
+    description="""
+전북대학교 공지사항을 크롤링하고 조회하는 API
+
+## 기능
+- 📢 공지사항 조회 및 검색
+- 🔄 크롤링 실행
+- 📋 게시판 관리
+    """,
+    version="2.0.0",
     lifespan=lifespan
 )
 
-# CORS 설정 (프론트엔드에서 접근 가능하도록)
+# CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 프로덕션에서는 특정 도메인만 허용
+    allow_origins=["*"],  # 프로덕션에서는 특정 도메인만
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # 라우터 등록
-app.include_router(auth.router)
-app.include_router(crawler.router)
+app.include_router(notices.router)
 
 
 @app.get("/health")
 async def health_check():
-    """
-    헬스체크 엔드포인트
-    """
-    return {"status": "ok"}
+    """헬스체크"""
+    return {"status": "ok", "version": "2.0.0"}
 
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True  # 개발 중에는 True, 프로덕션에서는 False
+        host=settings.API_HOST,
+        port=settings.API_PORT,
+        reload=settings.DEBUG
     )

@@ -201,6 +201,7 @@ name = "crawling"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "dnspython" },
     { name = "fastapi" },
     { name = "fastmcp" },
     { name = "playwright" },
@@ -211,6 +212,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dnspython", specifier = ">=2.8.0" },
     { name = "fastapi", specifier = ">=0.128.0" },
     { name = "fastmcp", specifier = ">=2.14.4" },
     { name = "playwright", specifier = ">=1.57.0" },

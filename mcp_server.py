@@ -1,145 +1,171 @@
-"""JBNU LMS Crawler MCP Server
+"""
+JBNU 공지사항 크롤러 MCP 서버
 
-Claude가 전북대 LMS를 크롤링할 수 있도록 하는 MCP 서버
+Claude가 전북대 공지사항을 조회할 수 있도록 하는 MCP 서버
 
 사용법:
     uv run python mcp_server.py
 """
-
-import asyncio
-from typing import Optional
+from typing import Optional, List
 from fastmcp import FastMCP
 
-from app.core.browser import browser_manager
-from app.core.session import session_manager
+from app.core.database import Database, init_boards
+from app.services import (
+    get_notices,
+    search_notices,
+    get_boards,
+    get_boards_by_group,
+    crawl_all
+)
+from app.config import settings
 
 # MCP 서버 생성
-mcp = FastMCP("JBNU LMS Crawler")
+mcp = FastMCP("JBNU 공지사항 크롤러")
 
 
-@mcp.tool()
-async def login_to_lms(username: str, password: str) -> dict:
-    """
-    전북대 LMS에 로그인을 시작합니다.
-
-    Args:
-        username: 전북대 포털 ID (학번/사번)
-        password: 비밀번호
-
-    Returns:
-        로그인 결과 (OTP 필요 여부 포함)
-    """
-    session_id = session_manager.create_session(username)
-    result = await browser_manager.start_login(session_id, username, password)
-
-    # 세션 ID를 함께 반환 (OTP 제출 시 필요)
-    if result["status"] == "otp_required":
-        result["session_id"] = session_id
-
-    return result
-
+# ============================================================
+# 공지사항 관련 도구
+# ============================================================
 
 @mcp.tool()
-async def submit_otp(session_id: str, otp: str) -> dict:
+async def get_latest_notices(
+    boards: Optional[List[str]] = None,
+    days: int = 7,
+    limit: int = 20
+) -> dict:
     """
-    Google OTP를 제출하여 로그인을 완료합니다.
+    최신 공지사항을 가져옵니다.
 
     Args:
-        session_id: login_to_lms에서 받은 세션 ID
-        otp: Google Authenticator 6자리 코드
+        boards: 게시판 이름 목록 (예: ["컴퓨터인공지능학부", "SW중심대학사업단"])
+        days: 최근 N일 (기본: 7일)
+        limit: 최대 개수 (기본: 20개)
 
     Returns:
-        로그인 완료 결과
+        최신 공지사항 목록
+
+    예시:
+        - "오늘 새 공지 있어?" → get_latest_notices(days=1)
+        - "이번 주 컴공 공지" → get_latest_notices(boards=["컴퓨터인공지능학부"], days=7)
     """
-    # 세션에서 username 가져오기
-    session = session_manager.get_session(session_id)
-    if not session:
-        return {"status": "error", "message": "세션을 찾을 수 없습니다"}
+    await _ensure_db_connected()
 
-    username = session["username"]
-    result = await browser_manager.submit_otp(session_id, otp, username)
-
-    # 로그인 완료 후 세션 정리
-    if result["status"] == "success":
-        await browser_manager.close_context(session_id)
-        session_manager.cleanup_session(session_id)
-
-    return result
-
-
-@mcp.tool()
-async def get_lms_courses(username: str) -> dict:
-    """
-    사용자의 강의 목록을 조회합니다.
-    저장된 로그인 쿠키를 사용하므로 먼저 로그인이 필요합니다.
-
-    Args:
-        username: 전북대 포털 ID (학번/사번)
-
-    Returns:
-        강의 목록 (강의명, 교수명, 학기 정보)
-    """
-    courses = await browser_manager.crawl_courses(username)
-
-    if not courses:
-        return {
-            "status": "error",
-            "message": "강의 목록을 가져올 수 없습니다. 먼저 로그인해주세요.",
-            "courses": []
-        }
+    result = await get_notices(
+        board_names=boards,
+        days=days,
+        page=1,
+        limit=limit
+    )
 
     return {
         "status": "success",
-        "courses": courses,
-        "count": len(courses)
+        "count": len(result["notices"]),
+        "total": result["total"],
+        "notices": result["notices"]
     }
 
 
 @mcp.tool()
-def logout_from_lms(username: str) -> dict:
+async def search_jbnu_notices(
+    keyword: str,
+    boards: Optional[List[str]] = None,
+    limit: int = 20
+) -> dict:
     """
-    저장된 로그인 세션을 삭제합니다.
+    공지사항을 키워드로 검색합니다. (제목 기준)
 
     Args:
-        username: 전북대 포털 ID (학번/사번)
+        keyword: 검색 키워드 (예: "장학금", "취업", "특강")
+        boards: 게시판 이름 목록 (없으면 전체 검색)
+        limit: 최대 개수 (기본: 20개)
 
     Returns:
-        로그아웃 결과
+        검색된 공지사항 목록
+
+    예시:
+        - "장학금 관련 공지 찾아줘" → search_jbnu_notices("장학금")
+        - "컴공 취업 공지" → search_jbnu_notices("취업", boards=["컴퓨터인공지능학부"])
     """
-    session_manager.delete_cookies(username)
+    await _ensure_db_connected()
+
+    notices = await search_notices(
+        keyword=keyword,
+        board_names=boards,
+        limit=limit
+    )
+
     return {
         "status": "success",
-        "message": f"{username}의 로그인 세션이 삭제되었습니다"
+        "keyword": keyword,
+        "count": len(notices),
+        "notices": notices
     }
 
 
 @mcp.tool()
-def check_login_status(username: str) -> dict:
+async def list_notice_boards() -> dict:
     """
-    저장된 로그인 세션이 있는지 확인합니다.
-
-    Args:
-        username: 전북대 포털 ID (학번/사번)
+    사용 가능한 게시판 목록을 반환합니다.
+    그룹별(전북대, 단과대, 학과, 사업단)로 정리되어 있습니다.
 
     Returns:
-        로그인 상태 정보
+        게시판 목록 (그룹별)
     """
-    cookies = session_manager.load_cookies(username)
+    await _ensure_db_connected()
 
-    if cookies:
-        return {
-            "status": "logged_in",
-            "message": f"{username}의 로그인 세션이 유효합니다",
-            "has_cookies": True
-        }
-    else:
-        return {
-            "status": "not_logged_in",
-            "message": f"{username}의 로그인 세션이 없습니다",
-            "has_cookies": False
-        }
+    groups = await get_boards_by_group()
+
+    return {
+        "status": "success",
+        "groups": groups
+    }
+
+
+@mcp.tool()
+async def trigger_notice_crawl(boards: Optional[List[str]] = None) -> dict:
+    """
+    공지사항 크롤링을 실행합니다.
+
+    Args:
+        boards: 크롤링할 게시판 이름 목록 (없으면 전체)
+
+    Returns:
+        크롤링 결과 (새로 추가된 공지 수, 업데이트된 수)
+
+    예시:
+        - "공지 새로고침해줘" → trigger_notice_crawl()
+        - "컴공 공지만 업데이트" → trigger_notice_crawl(boards=["컴퓨터인공지능학부"])
+    """
+    await _ensure_db_connected()
+
+    result = await crawl_all(board_names=boards)
+
+    return {
+        "status": "success",
+        "total_new": result["total_new"],
+        "total_updated": result["total_updated"],
+        "details": result["results"]
+    }
+
+
+# ============================================================
+# 유틸리티
+# ============================================================
+
+_db_connected = False
+
+
+async def _ensure_db_connected():
+    """MongoDB 연결 확인 및 연결"""
+    global _db_connected
+    if not _db_connected:
+        await Database.connect(
+            uri=settings.MONGODB_URI,
+            db_name=settings.MONGODB_DB_NAME
+        )
+        await init_boards()
+        _db_connected = True
 
 
 if __name__ == "__main__":
-    # MCP 서버 실행
     mcp.run()
