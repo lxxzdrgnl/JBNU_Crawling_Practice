@@ -18,12 +18,9 @@ logger = logging.getLogger(__name__)
 class BaseCrawler(ABC):
     """기본 크롤러 클래스"""
 
-    # 페이지네이션 설정
-    pagination_type: str = "param"  # "param" 또는 "js"
-    pagination_param: str = "page"
-    pagination_js_func: str = ""
     row_selector: str = "table tbody tr"
     base_domain: str = ""
+    pagination_param: str = "page"
 
     # 상세 페이지 선택자
     content_selector: str = ".view-content, .board-view-content, article, .contents"
@@ -135,7 +132,7 @@ class BaseCrawler(ABC):
                             continue
 
                         attachments.append({"name": name, "url": href})
-                except:
+                except Exception:
                     continue
 
             return {"content": content, "attachments": attachments}
@@ -144,6 +141,19 @@ class BaseCrawler(ABC):
             logger.error(f"[{self.board_name}] 상세 페이지 파싱 오류 ({url}): {e}")
             return {"content": "", "attachments": []}
 
+    async def _navigate_to_page(self, url: str, page_num: int) -> bool:
+        """
+        페이지 이동 - 서브클래스에서 오버라이드하여 페이지네이션 방식 변경
+
+        Returns:
+            True: 이동 성공, False: 더 이상 페이지 없음
+        """
+        separator = "&" if "?" in url else "?"
+        page_url = f"{url}{separator}{self.pagination_param}={page_num}"
+        await self.page.goto(page_url, wait_until="networkidle", timeout=30000)
+        await self.page.wait_for_timeout(2000)
+        return True
+
     async def parse_list(self, url: str, max_pages: Optional[int] = None, min_year: int = 2025) -> AsyncGenerator[List[Dict[str, Any]], None]:
         """목록 페이지 파싱 - 페이지 단위로 yield (메모리 절약)"""
         logger.info(f"[{self.board_name}] 크롤링 시작: {url} (min_year={min_year})")
@@ -151,17 +161,8 @@ class BaseCrawler(ABC):
         stop_crawling = False
 
         while not stop_crawling:
-            # 페이지 이동
-            if self.pagination_type == "param":
-                separator = "&" if "?" in url else "?"
-                page_url = f"{url}{separator}{self.pagination_param}={current_page}"
-                await self.page.goto(page_url, wait_until="networkidle", timeout=30000)
-            else:
-                await self.page.goto(url, wait_until="networkidle", timeout=30000)
-                if current_page > 1:
-                    await self.page.evaluate(f"{self.pagination_js_func}({current_page})")
-
-            await self.page.wait_for_timeout(2000)
+            if not await self._navigate_to_page(url, current_page):
+                break
 
             rows = await self.page.query_selector_all(self.row_selector)
             logger.info(f"[{self.board_name}] 페이지 {current_page}: {len(rows)}행")
@@ -213,7 +214,6 @@ class BaseCrawler(ABC):
         for url_info in urls:
             try:
                 no_new_pages = 0  # 연속으로 new=0인 페이지 수
-                prev_new = 0
 
                 async for page_notices in self.parse_list(url_info["url"], max_pages=max_pages, min_year=min_year):
                     page_new = 0
@@ -222,18 +222,17 @@ class BaseCrawler(ABC):
                         # 이미 존재하는 공지인지 확인
                         existing = await Database.notices().find_one({"url": notice["url"]})
 
-                        # 새 공지이거나 content가 없으면 상세 페이지 크롤링
-                        if not existing or not existing.get("content"):
-                            logger.info(f"[{self.board_name}] 상세 크롤링: {notice['title'][:30]}")
-                            detail = await self.parse_detail(notice["url"])
-                            notice["content"] = detail["content"]
-                            notice["attachments"] = detail["attachments"]
-                        else:
-                            # 기존 데이터 유지
-                            notice["content"] = existing.get("content", "")
-                            notice["attachments"] = existing.get("attachments", [])
+                        # 이미 content까지 있으면 스킵
+                        if existing and existing.get("content"):
+                            continue
 
-                        # DB 즉시 저장
+                        # 새 공지이거나 content가 없으면 상세 페이지 크롤링
+                        logger.info(f"[{self.board_name}] 상세 크롤링: {notice['title'][:30]}")
+                        detail = await self.parse_detail(notice["url"])
+                        notice["content"] = detail["content"]
+                        notice["attachments"] = detail["attachments"]
+
+                        # DB 저장
                         result = await Database.notices().update_one(
                             {"url": notice["url"]},
                             {
@@ -259,7 +258,7 @@ class BaseCrawler(ABC):
                         elif result.modified_count:
                             total_updated += 1
 
-                    logger.info(f"[{self.board_name}] 페이지 저장 완료: new={total_new}, updated={total_updated}")
+                    logger.info(f"[{self.board_name}] 페이지 저장 완료: page_new={page_new}, total_new={total_new}, total_updated={total_updated}")
 
                     # 연속 2페이지 new=0이면 이전 데이터 도달로 판단, 중단
                     if page_new == 0:

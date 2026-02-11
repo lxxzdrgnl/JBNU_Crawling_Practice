@@ -37,7 +37,7 @@ async def get_latest_notices(
     최신 공지사항을 가져옵니다.
 
     Args:
-        boards: 게시판 이름 목록 (예: ["컴퓨터인공지능학부", "SW중심대학사업단"])
+        boards: 게시판 slug 목록 (예: ["csai", "swuniv", "student"])
         days: 최근 N일 (기본: 7일)
         limit: 최대 개수 (기본: 20개)
 
@@ -46,12 +46,12 @@ async def get_latest_notices(
 
     예시:
         - "오늘 새 공지 있어?" → get_latest_notices(days=1)
-        - "이번 주 컴공 공지" → get_latest_notices(boards=["컴퓨터인공지능학부"], days=7)
+        - "이번 주 컴공 공지" → get_latest_notices(boards=["csai"], days=7)
     """
     await _ensure_db_connected()
 
     result = await get_notices(
-        board_names=boards,
+        board_slugs=boards,
         days=days,
         page=1,
         limit=limit
@@ -76,7 +76,7 @@ async def search_jbnu_notices(
 
     Args:
         keyword: 검색 키워드 (예: "장학금", "취업", "특강")
-        boards: 게시판 이름 목록 (없으면 전체 검색)
+        boards: 게시판 slug 목록 (없으면 전체 검색)
         limit: 최대 개수 (기본: 20개)
 
     Returns:
@@ -84,13 +84,13 @@ async def search_jbnu_notices(
 
     예시:
         - "장학금 관련 공지 찾아줘" → search_jbnu_notices("장학금")
-        - "컴공 취업 공지" → search_jbnu_notices("취업", boards=["컴퓨터인공지능학부"])
+        - "컴공 취업 공지" → search_jbnu_notices("취업", boards=["csai"])
     """
     await _ensure_db_connected()
 
     notices = await search_notices(
         keyword=keyword,
-        board_names=boards,
+        board_slugs=boards,
         limit=limit
     )
 
@@ -127,18 +127,18 @@ async def trigger_notice_crawl(boards: Optional[List[str]] = None) -> dict:
     공지사항 크롤링을 실행합니다.
 
     Args:
-        boards: 크롤링할 게시판 이름 목록 (없으면 전체)
+        boards: 크롤링할 게시판 slug 목록 (없으면 전체)
 
     Returns:
         크롤링 결과 (새로 추가된 공지 수, 업데이트된 수)
 
     예시:
         - "공지 새로고침해줘" → trigger_notice_crawl()
-        - "컴공 공지만 업데이트" → trigger_notice_crawl(boards=["컴퓨터인공지능학부"])
+        - "컴공 공지만 업데이트" → trigger_notice_crawl(boards=["csai"])
     """
     await _ensure_db_connected()
 
-    result = await crawl_all(board_names=boards)
+    result = await crawl_all(board_slugs=boards)
 
     return {
         "status": "success",

@@ -13,7 +13,6 @@ from app.services import (
     crawl_all,
     crawl_board
 )
-from app.models.db_models import NoticeListResponse, CrawlResponse, CrawlResult
 
 router = APIRouter(prefix="/notices", tags=["notices"])
 

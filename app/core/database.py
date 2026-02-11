@@ -48,11 +48,6 @@ class Database:
         await cls.notices().create_index([("date", -1)])
 
         # 텍스트 검색 인덱스 (제목 + 본문)
-        # 기존 인덱스 삭제 후 재생성
-        try:
-            await cls.notices().drop_index("title_text")
-        except:
-            pass
         await cls.notices().create_index(
             [("title", "text"), ("content", "text")],
             default_language="none",

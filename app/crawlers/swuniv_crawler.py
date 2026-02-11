@@ -3,7 +3,7 @@ SW중심대학사업단 크롤러
 URL 패턴: swuniv.jbnu.ac.kr/main/jbnusw?gc=605XOAS
 """
 import logging
-from typing import Dict, Any, Optional, List, AsyncGenerator
+from typing import Dict, Any, Optional
 from .base import BaseCrawler
 
 logger = logging.getLogger(__name__)
@@ -17,57 +17,12 @@ class SwunivCrawler(BaseCrawler):
     content_selector = ".content_wrap"
     attachment_selector = "a[href*='download'], a[href*='file']"
 
-    async def parse_list(self, url: str, max_pages: Optional[int] = None, min_year: int = 2025) -> AsyncGenerator[List[Dict[str, Any]], None]:
-        """SWUNIV는 특수한 페이지네이션 - 페이지 단위로 yield"""
-        logger.info(f"[SWUNIV] 크롤링 시작: {url} (min_year={min_year})")
-        current_page = 1
-        stop_crawling = False
-
-        while not stop_crawling:
-            # SWUNIV 특수 URL 패턴
-            page_url = f"{url}&do=list&page={current_page}"
-            await self.page.goto(page_url, wait_until="networkidle", timeout=30000)
-            await self.page.wait_for_timeout(2000)
-
-            rows = await self.page.query_selector_all(self.row_selector)
-            logger.info(f"[SWUNIV] 페이지 {current_page}: {len(rows)}행")
-
-            if not rows:
-                break
-
-            page_notices = []
-            for row in rows:
-                try:
-                    notice = await self.parse_row(row, url)
-                    if not notice:
-                        continue
-
-                    if notice.get("date"):
-                        try:
-                            year = int(notice["date"][:4])
-                            if year < min_year:
-                                logger.info(f"[SWUNIV] {min_year}년 이전 글 발견, 크롤링 중단")
-                                stop_crawling = True
-                                break
-                        except (ValueError, IndexError):
-                            pass
-
-                    page_notices.append(notice)
-
-                except Exception as e:
-                    logger.error(f"[SWUNIV] 행 파싱 오류: {e}")
-                    continue
-
-            if page_notices:
-                yield page_notices
-
-            if not page_notices or stop_crawling:
-                break
-
-            if max_pages and current_page >= max_pages:
-                break
-
-            current_page += 1
+    async def _navigate_to_page(self, url: str, page_num: int) -> bool:
+        """SWUNIV 특수 URL 패턴 페이지네이션"""
+        page_url = f"{url}&do=list&page={page_num}"
+        await self.page.goto(page_url, wait_until="networkidle", timeout=30000)
+        await self.page.wait_for_timeout(2000)
+        return True
 
     async def parse_row(self, row, base_url: str) -> Optional[Dict[str, Any]]:
         """단일 행 파싱"""

@@ -147,6 +147,7 @@ Crawling/
 
 모든 크롤러는 `BaseCrawler`를 상속하며, 사이트별로 셀렉터와 동작을 오버라이드합니다.
 
+- **Template Method**: `_navigate_to_page()` 오버라이드로 사이트별 페이지네이션 분리
 - **메모리 효율**: `parse_list`가 async generator로 페이지 단위 yield
 - **듀얼 탭**: 목록(`self.page`)과 상세(`self.detail_page`) 분리
 - **테이블 변환**: HTML 테이블을 파이프 구분 텍스트로 변환 (AI 가독성 최적화)

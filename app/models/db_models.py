@@ -110,8 +110,8 @@ class NoticeListResponse(BaseModel):
 class CrawlResult(BaseModel):
     """크롤링 결과"""
     board_name: str
-    new_count: int
-    updated_count: int
+    new: int
+    updated: int
     error: Optional[str] = None
 
 

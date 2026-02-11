@@ -9,8 +9,6 @@ from .base import BaseCrawler
 class CSAICrawler(BaseCrawler):
     """컴퓨터인공지능학부 크롤러"""
 
-    pagination_type = "param"
-    pagination_param = "page"
     row_selector = ".artclTable tbody tr"
     base_domain = "https://csai.jbnu.ac.kr"
     content_selector = ".artclView"

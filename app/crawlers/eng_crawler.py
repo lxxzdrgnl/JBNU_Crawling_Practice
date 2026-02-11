@@ -3,9 +3,8 @@
 URL 패턴: eng.jbnu.ac.kr/{path}/notice
 Vue SPA 기반 - 상세 URL에 ?type=board 필수, 첨부파일은 버튼 클릭 다운로드
 """
-import re
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from .base import BaseCrawler
 
 logger = logging.getLogger(__name__)
@@ -14,8 +13,6 @@ logger = logging.getLogger(__name__)
 class EngCrawler(BaseCrawler):
     """공과대학 크롤러"""
 
-    pagination_type = "param"
-    pagination_param = "page"
     row_selector = "table tbody tr"
     base_domain = "https://eng.jbnu.ac.kr"
     content_selector = ".content_wrap"
